@@ -1,7 +1,6 @@
 package com.sheinmulti.profile
 
 import android.app.Application
-import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.os.Process
@@ -11,7 +10,8 @@ import android.util.Log
 class MyApplication : Application() {
     companion object {
         private const val TAG = "MyApplication"
-
+        private const val PREFS_NAME = "webview_profile_prefs"
+        private const val KEY_SUFFIX = "current_suffix"
         const val WEBVIEW_PROCESS_SUFFIX = ":webview"
 
         fun getProcessName(context: Context): String? {
@@ -20,7 +20,7 @@ class MyApplication : Application() {
             } else {
                 try {
                     val pid = Process.myPid()
-                    val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                    val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
                     manager.runningAppProcesses?.find { it.pid == pid }?.processName
                 } catch (e: Exception) {
                     null
@@ -31,6 +31,34 @@ class MyApplication : Application() {
         fun isWebViewProcess(context: Context): Boolean {
             return getProcessName(context)?.endsWith(WEBVIEW_PROCESS_SUFFIX) == true
         }
+
+        /**
+         * Guarda el suffix del perfil en SharedPreferences para que el proceso :webview lo lea
+         */
+        fun saveProfileSuffix(context: Context, suffix: String) {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_SUFFIX, suffix)
+                .apply()
+        }
+
+        /**
+         * Lee el suffix del perfil desde SharedPreferences
+         */
+        fun getProfileSuffix(context: Context): String? {
+            return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_SUFFIX, null)
+        }
+
+        /**
+         * Limpia el suffix guardado
+         */
+        fun clearProfileSuffix(context: Context) {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .remove(KEY_SUFFIX)
+                .apply()
+        }
     }
 
     override fun onCreate() {
@@ -39,14 +67,11 @@ class MyApplication : Application() {
         val processName = getProcessName(this) ?: "unknown"
         Log.d(TAG, "Process started: $processName")
 
-        // CRÍTICO: Para Android 9+, si estamos en el proceso :webview,
-        // debemos establecer el data directory suffix ANTES de que cualquier 
-        // WebView sea instanciado o cualquier método de android.webkit sea llamado.
-        // Esto debe hacerse aquí en Application.onCreate(), NO en Activity.onCreate()
+        // CRÍTICO: Para Android 9+, establecer el suffix ANTES de instanciar WebView
+        // Leemos el suffix desde SharedPreferences que fue guardado por MainActivity
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && isWebViewProcess(this)) {
             try {
-                // El suffix se pasará por Intent, pero usamos un default por si acaso
-                val suffix = intentSuffix ?: "webview_default"
+                val suffix = getProfileSuffix(this) ?: "webview_default"
                 WebView.setDataDirectorySuffix(suffix)
                 Log.d(TAG, "WebView data directory suffix set: $suffix")
             } catch (e: Exception) {
@@ -57,12 +82,5 @@ class MyApplication : Application() {
         if (BuildConfig.DEBUG) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
-    }
-
-    // Variable estática para recibir el suffix del Intent antes de que onCreate() se ejecute
-    // Esto se establece desde WebViewActivity antes de que el proceso se inicie
-    companion object {
-        @Volatile
-        var intentSuffix: String? = null
     }
 }
