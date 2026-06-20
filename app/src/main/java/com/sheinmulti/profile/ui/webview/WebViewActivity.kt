@@ -10,9 +10,11 @@ import android.webkit.*
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.sheinmulti.profile.MyApplication
+import androidx.lifecycle.lifecycleScope
 import com.sheinmulti.profile.R
+import com.sheinmulti.profile.data.local.ProfileCookieManager
 import com.sheinmulti.profile.databinding.ActivityWebviewBinding
+import kotlinx.coroutines.launch
 import okhttp3.*
 import okhttp3.Credentials
 import java.net.InetSocketAddress
@@ -22,12 +24,12 @@ import java.util.concurrent.TimeUnit
 class WebViewActivity : AppCompatActivity() {
     private lateinit var binding: ActivityWebviewBinding
     private var profileId: Long = -1
-    private lateinit var profileSuffix: String
     private lateinit var profileName: String
     private lateinit var userAgent: String
     private lateinit var startUrl: String
+    private lateinit var cookieManager: ProfileCookieManager
 
-    // Proxy config encapsulada en data class inmutable
+    // Proxy config
     private data class ProxyConfig(
         val host: String,
         val port: Int,
@@ -35,7 +37,6 @@ class WebViewActivity : AppCompatActivity() {
         val password: String?,
         val type: String
     )
-
     private var proxyConfig: ProxyConfig? = null
     private var okHttpClient: OkHttpClient? = null
 
@@ -43,26 +44,23 @@ class WebViewActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         profileId = intent.getLongExtra("PROFILE_ID", -1)
-        profileSuffix = intent.getStringExtra("PROFILE_SUFFIX") ?: "default"
         profileName = intent.getStringExtra("PROFILE_NAME") ?: "Navegador"
         userAgent = intent.getStringExtra("USER_AGENT") ?: ""
         startUrl = intent.getStringExtra("START_URL") ?: "https://www.google.com"
 
-        // Cargar configuración de proxy desde Intent
+        cookieManager = ProfileCookieManager(this)
+
+        // Cargar configuración de proxy
         val proxyHost = intent.getStringExtra("PROXY_HOST")
         val proxyPort = intent.getIntExtra("PROXY_PORT", -1)
         val proxyUsername = intent.getStringExtra("PROXY_USERNAME")
         val proxyPassword = intent.getStringExtra("PROXY_PASSWORD")
         val proxyType = intent.getStringExtra("PROXY_TYPE") ?: "NONE"
 
-        // Crear configuración segura de proxy
         if (proxyType != "NONE" && !proxyHost.isNullOrBlank() && proxyPort > 0) {
             proxyConfig = ProxyConfig(
-                host = proxyHost,
-                port = proxyPort,
-                username = proxyUsername,
-                password = proxyPassword,
-                type = proxyType
+                host = proxyHost, port = proxyPort,
+                username = proxyUsername, password = proxyPassword, type = proxyType
             )
             setupProxyClient()
         }
@@ -72,15 +70,16 @@ class WebViewActivity : AppCompatActivity() {
 
         setupToolbar()
         setupWebView()
-        loadStartUrl()
+
+        // Cargar cookies del perfil ANTES de cargar la URL
+        lifecycleScope.launch {
+            cookieManager.loadProfileCookies(profileId)
+            loadStartUrl()
+        }
     }
 
-    /**
-     * Configura el cliente OkHttp con proxy para interceptar requests del WebView
-     */
     private fun setupProxyClient() {
         val config = proxyConfig ?: return
-
         try {
             val builder = OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
@@ -93,8 +92,6 @@ class WebViewActivity : AppCompatActivity() {
                 "HTTP" -> {
                     val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress(config.host, config.port))
                     builder.proxy(proxy)
-
-                    // Autenticación proxy - variables locales para evitar smart cast issues
                     val username = config.username
                     val password = config.password
                     if (!username.isNullOrBlank() && !password.isNullOrBlank()) {
@@ -105,20 +102,16 @@ class WebViewActivity : AppCompatActivity() {
                                 .build()
                         }
                     }
-                    android.util.Log.d("WebViewActivity", "HTTP Proxy configured: ${config.host}:${config.port}")
                 }
                 "SOCKS4", "SOCKS5" -> {
                     val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(config.host, config.port))
                     builder.proxy(proxy)
-                    android.util.Log.d("WebViewActivity", "${config.type} Proxy configured: ${config.host}:${config.port}")
                 }
             }
-
             okHttpClient = builder.build()
-            Toast.makeText(this, "Proxy ${config.type} activado: ${config.host}:${config.port}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Proxy ${config.type}: ${config.host}:${config.port}", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(this, "Error configurando proxy: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Error proxy: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -156,15 +149,11 @@ class WebViewActivity : AppCompatActivity() {
 
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val url = request?.url?.toString() ?: return null
-
                 if (okHttpClient == null) return null
-
                 if (!url.startsWith("http://") && !url.startsWith("https://")) return null
-
                 return try {
                     interceptRequest(url, request)
                 } catch (e: Exception) {
-                    android.util.Log.e("WebViewActivity", "Error intercepting request: ${e.message}")
                     null
                 }
             }
@@ -190,29 +179,14 @@ class WebViewActivity : AppCompatActivity() {
                 binding.progressBar.progress = newProgress
             }
             override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                consoleMessage?.let { android.util.Log.d("WebView", "${it.message()} - Line ${it.lineNumber()}") }
+                consoleMessage?.let { android.util.Log.d("WebView", "${it.message()}") }
                 return true
             }
-            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
-                val newWebView = WebView(this@WebViewActivity)
-                val transport = resultMsg?.obj as WebView.WebViewTransport
-                transport.webView = newWebView
-                resultMsg?.sendToTarget()
-                return true
-            }
-        }
-
-        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
-            Toast.makeText(this, "Descarga iniciada", Toast.LENGTH_SHORT).show()
         }
     }
 
-    /**
-     * Intercepta un request del WebView y lo reenvía a través del proxy OkHttp
-     */
     private fun interceptRequest(url: String, request: WebResourceRequest): WebResourceResponse? {
         val client = okHttpClient ?: return null
-
         val okRequest = Request.Builder()
             .url(url)
             .header("User-Agent", userAgent.takeIf { it.isNotBlank() } ?: request.requestHeaders["User-Agent"] ?: "")
@@ -225,16 +199,11 @@ class WebViewActivity : AppCompatActivity() {
             .build()
 
         val response = client.newCall(okRequest).execute()
-
-        if (!response.isSuccessful) {
-            response.close()
-            return null
-        }
+        if (!response.isSuccessful) { response.close(); return null }
 
         val contentType = response.header("Content-Type") ?: "text/html"
         val mimeType = contentType.split(";")[0].trim()
         val charset = contentType.split("charset=").getOrNull(1)?.trim() ?: "UTF-8"
-
         val inputStream = response.body?.byteStream() ?: return null
 
         return WebResourceResponse(mimeType, charset, inputStream)
@@ -259,27 +228,29 @@ class WebViewActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Limpia SOLO las cookies y datos de ESTE perfil
-     */
     private fun clearProfileCookies() {
         AlertDialog.Builder(this)
             .setTitle("Limpiar Cookies")
-            .setMessage("¿Eliminar todas las cookies y datos de sesion de este perfil?")
+            .setMessage("¿Eliminar cookies de este perfil?")
             .setPositiveButton("Limpiar") { _, _ ->
-                CookieManager.getInstance().removeAllCookies { _ ->
-                    CookieManager.getInstance().flush()
-                    WebStorage.getInstance().deleteAllData()
+                lifecycleScope.launch {
+                    cookieManager.clearProfileCookies(profileId)
                     binding.webView.clearCache(true)
                     binding.webView.clearHistory()
-                    runOnUiThread {
-                        Toast.makeText(this, "Cookies del perfil eliminadas", Toast.LENGTH_SHORT).show()
-                        binding.webView.loadUrl(startUrl)
-                    }
+                    Toast.makeText(this@WebViewActivity, "Cookies eliminadas", Toast.LENGTH_SHORT).show()
+                    binding.webView.loadUrl(startUrl)
                 }
             }
             .setNegativeButton("Cancelar", null)
             .show()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Guardar cookies al pausar la actividad
+        lifecycleScope.launch {
+            cookieManager.saveProfileCookies(profileId)
+        }
     }
 
     override fun onBackPressed() {
@@ -288,7 +259,9 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        MyApplication.clearProfileSuffix(this)
+        lifecycleScope.launch {
+            cookieManager.saveProfileCookies(profileId)
+        }
         binding.webView.stopLoading()
         binding.webView.loadUrl("about:blank")
         super.onDestroy()
