@@ -7,7 +7,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.sheinmulti.profile.MyApplication
 import com.sheinmulti.profile.adapter.ProfileAdapter
 import com.sheinmulti.profile.data.model.BrowserProfile
 import com.sheinmulti.profile.databinding.ActivityMainBinding
@@ -63,16 +62,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun openProfile(profile: BrowserProfile) {
         viewModel.activateProfile(profile.id)
-
         try {
-            // CRÍTICO: Guardar el suffix en SharedPreferences ANTES de iniciar la Activity
-            // El proceso :webview leerá esto en MyApplication.onCreate()
-            MyApplication.saveProfileSuffix(this, profile.dataDirectorySuffix)
-
             val intent = Intent(this, WebViewActivity::class.java).apply {
                 putExtra("PROFILE_ID", profile.id)
                 putExtra("PROFILE_NAME", profile.name)
-                putExtra("PROFILE_SUFFIX", profile.dataDirectorySuffix)
                 putExtra("START_URL", profile.startUrl.ifBlank { "https://www.google.com" })
                 putExtra("USER_AGENT", profile.userAgent)
                 putExtra("PROXY_HOST", profile.proxyHost)
