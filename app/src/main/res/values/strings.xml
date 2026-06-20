@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">SheIn Multi-Profile</string>
+    <string name="add_profile">Agregar Perfil</string>
+    <string name="edit_profile">Editar Perfil</string>
+    <string name="delete_profile">Eliminar Perfil</string>
+    <string name="profile_name">Nombre del Perfil</string>
+    <string name="start_url">URL de Inicio</string>
+    <string name="user_agent">User Agent</string>
+    <string name="proxy_host">Host del Proxy</string>
+    <string name="proxy_port">Puerto del Proxy</string>
+    <string name="proxy_username">Usuario del Proxy</string>
+    <string name="proxy_password">Contrasena del Proxy</string>
+    <string name="proxy_type">Tipo de Proxy</string>
+    <string name="save">Guardar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="open_browser">Abrir Navegador</string>
+    <string name="no_profiles">No hay perfiles. Crea uno para empezar.</string>
+    <string name="profile_created">Perfil creado exitosamente</string>
+    <string name="profile_updated">Perfil actualizado</string>
+    <string name="profile_deleted">Perfil eliminado</string>
+    <string name="confirm_delete">¿Eliminar este perfil? Se perderan todas las cookies y sesiones.</string>
+    <string name="default_user_agent">Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36</string>
+    <string name="active_sessions">Sesiones Activas</string>
+    <string name="cookies_cleared">Cookies limpiadas</string>
+    <string name="clear_cookies">Limpiar Cookies</string>
+</resources>
