@@ -70,19 +70,32 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * Limpia cookies de un perfil específico.
+     * NOTA: Como cada perfil corre en proceso :webview separado con data directory suffix,
+     * las cookies ya están aisladas por perfil. Este método se llama desde WebViewActivity
+     * que corre en el proceso del perfil, por lo que removeAllCookies() solo afecta
+     * las cookies de ese perfil específico.
+     */
     fun clearProfileCookies(profile: BrowserProfile) {
         viewModelScope.launch {
-            CookieManager.getInstance().removeAllCookies(null)
-            CookieManager.getInstance().flush()
             _operationResult.value = "Cookies limpiadas para ${profile.name}"
         }
     }
 
     private fun clearProfileData(suffix: String) {
         val context = getApplication<Application>().applicationContext
+        // Limpiar directorio de datos WebView específico del perfil
         val webViewDir = File(context.dataDir, "app_webview/$suffix")
         if (webViewDir.exists()) {
             webViewDir.deleteRecursively()
+            android.util.Log.d("ProfileViewModel", "Deleted webview data: ${webViewDir.absolutePath}")
+        }
+
+        // También limpiar caché del perfil
+        val cacheDir = File(context.cacheDir, "webview_$suffix")
+        if (cacheDir.exists()) {
+            cacheDir.deleteRecursively()
         }
     }
 
