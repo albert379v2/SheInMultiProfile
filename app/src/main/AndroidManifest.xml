@@ -28,8 +28,11 @@
             </intent-filter>
         </activity>
 
+        <!-- WebViewActivity corre en proceso separado para aislamiento de perfiles -->
+        <!-- Cada vez que se abre un perfil, el proceso :webview se reinicia -->
         <activity
             android:name=".ui.webview.WebViewActivity"
+            android:process=":webview"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
 
