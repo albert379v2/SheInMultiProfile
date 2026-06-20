@@ -2,7 +2,6 @@ package com.sheinmulti.profile.ui.webview
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
-import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -16,7 +15,6 @@ import com.sheinmulti.profile.R
 import com.sheinmulti.profile.databinding.ActivityWebviewBinding
 import okhttp3.*
 import okhttp3.Credentials
-import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.util.concurrent.TimeUnit
@@ -29,14 +27,16 @@ class WebViewActivity : AppCompatActivity() {
     private lateinit var userAgent: String
     private lateinit var startUrl: String
 
-    // Proxy config
-    private var proxyHost: String? = null
-    private var proxyPort: Int = -1
-    private var proxyUsername: String? = null
-    private var proxyPassword: String? = null
-    private var proxyType: String = "NONE"
+    // Proxy config encapsulada en data class inmutable
+    private data class ProxyConfig(
+        val host: String,
+        val port: Int,
+        val username: String?,
+        val password: String?,
+        val type: String
+    )
 
-    // OkHttp client para proxy
+    private var proxyConfig: ProxyConfig? = null
     private var okHttpClient: OkHttpClient? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,18 +47,25 @@ class WebViewActivity : AppCompatActivity() {
         profileName = intent.getStringExtra("PROFILE_NAME") ?: "Navegador"
         userAgent = intent.getStringExtra("USER_AGENT") ?: ""
         startUrl = intent.getStringExtra("START_URL") ?: "https://www.google.com"
-        proxyHost = intent.getStringExtra("PROXY_HOST")
-        proxyPort = intent.getIntExtra("PROXY_PORT", -1)
-        proxyUsername = intent.getStringExtra("PROXY_USERNAME")
-        proxyPassword = intent.getStringExtra("PROXY_PASSWORD")
-        proxyType = intent.getStringExtra("PROXY_TYPE") ?: "NONE"
 
-        // CRÍTICO: Establecer el suffix ANTES de que MyApplication.onCreate() se ejecute
-        // Esto asegura que cuando el proceso :webview inicie, tenga el suffix correcto
-        MyApplication.intentSuffix = profileSuffix
+        // Cargar configuración de proxy desde Intent
+        val proxyHost = intent.getStringExtra("PROXY_HOST")
+        val proxyPort = intent.getIntExtra("PROXY_PORT", -1)
+        val proxyUsername = intent.getStringExtra("PROXY_USERNAME")
+        val proxyPassword = intent.getStringExtra("PROXY_PASSWORD")
+        val proxyType = intent.getStringExtra("PROXY_TYPE") ?: "NONE"
 
-        // Inicializar OkHttp client con proxy si está configurado
-        setupProxyClient()
+        // Crear configuración segura de proxy
+        if (proxyType != "NONE" && !proxyHost.isNullOrBlank() && proxyPort > 0) {
+            proxyConfig = ProxyConfig(
+                host = proxyHost,
+                port = proxyPort,
+                username = proxyUsername,
+                password = proxyPassword,
+                type = proxyType
+            )
+            setupProxyClient()
+        }
 
         binding = ActivityWebviewBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -72,10 +79,7 @@ class WebViewActivity : AppCompatActivity() {
      * Configura el cliente OkHttp con proxy para interceptar requests del WebView
      */
     private fun setupProxyClient() {
-        if (proxyType == "NONE" || proxyHost.isNullOrBlank() || proxyPort <= 0) {
-            android.util.Log.d("WebViewActivity", "No proxy configured")
-            return
-        }
+        val config = proxyConfig ?: return
 
         try {
             val builder = OkHttpClient.Builder()
@@ -85,33 +89,33 @@ class WebViewActivity : AppCompatActivity() {
                 .followRedirects(true)
                 .followSslRedirects(true)
 
-            when (proxyType) {
+            when (config.type) {
                 "HTTP" -> {
-                    val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress(proxyHost, proxyPort))
+                    val proxy = Proxy(Proxy.Type.HTTP, InetSocketAddress(config.host, config.port))
                     builder.proxy(proxy)
 
-                    // Autenticación proxy
-                    if (!proxyUsername.isNullOrBlank() && !proxyPassword.isNullOrBlank()) {
+                    // Autenticación proxy - variables locales para evitar smart cast issues
+                    val username = config.username
+                    val password = config.password
+                    if (!username.isNullOrBlank() && !password.isNullOrBlank()) {
                         builder.proxyAuthenticator { _, response ->
-                            val credential = Credentials.basic(proxyUsername, proxyPassword)
+                            val credential = Credentials.basic(username, password)
                             response.request.newBuilder()
                                 .header("Proxy-Authorization", credential)
                                 .build()
                         }
                     }
-                    android.util.Log.d("WebViewActivity", "HTTP Proxy configured: $proxyHost:$proxyPort")
+                    android.util.Log.d("WebViewActivity", "HTTP Proxy configured: ${config.host}:${config.port}")
                 }
                 "SOCKS4", "SOCKS5" -> {
-                    // Para SOCKS, usamos un proxy SOCKS directo
-                    val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(proxyHost, proxyPort))
+                    val proxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress(config.host, config.port))
                     builder.proxy(proxy)
-                    android.util.Log.d("WebViewActivity", "$proxyType Proxy configured: $proxyHost:$proxyPort")
-                    // Nota: SOCKS con autenticación requiere configuración adicional del sistema
+                    android.util.Log.d("WebViewActivity", "${config.type} Proxy configured: ${config.host}:${config.port}")
                 }
             }
 
             okHttpClient = builder.build()
-            Toast.makeText(this, "Proxy $proxyType activado: $proxyHost:$proxyPort", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Proxy ${config.type} activado: ${config.host}:${config.port}", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "Error configurando proxy: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -144,30 +148,24 @@ class WebViewActivity : AppCompatActivity() {
 
         if (userAgent.isNotBlank()) settings.userAgentString = userAgent
 
-        // Cookies: aceptar cookies para este perfil (aislado por proceso)
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
 
-            /**
-             * Intercepta requests y los reenvía a través del proxy OkHttp
-             */
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                 val url = request?.url?.toString() ?: return null
 
-                // Si no hay proxy configurado, dejar que WebView maneje el request normalmente
                 if (okHttpClient == null) return null
 
-                // Solo interceptar requests HTTP/HTTPS
                 if (!url.startsWith("http://") && !url.startsWith("https://")) return null
 
                 return try {
                     interceptRequest(url, request)
                 } catch (e: Exception) {
                     android.util.Log.e("WebViewActivity", "Error intercepting request: ${e.message}")
-                    null // Fallback a WebView nativo
+                    null
                 }
             }
 
@@ -263,8 +261,6 @@ class WebViewActivity : AppCompatActivity() {
 
     /**
      * Limpia SOLO las cookies y datos de ESTE perfil
-     * Como cada perfil corre en proceso :webview con su propio data directory suffix,
-     * esto solo afecta al perfil actual
      */
     private fun clearProfileCookies() {
         AlertDialog.Builder(this)
@@ -292,8 +288,7 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // Limpiar el suffix estático para evitar que se reutilice en el próximo perfil
-        MyApplication.intentSuffix = null
+        MyApplication.clearProfileSuffix(this)
         binding.webView.stopLoading()
         binding.webView.loadUrl("about:blank")
         super.onDestroy()
