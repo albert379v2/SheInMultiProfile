@@ -11,6 +11,7 @@ import android.webkit.*
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.sheinmulti.profile.MyApplication
 import com.sheinmulti.profile.R
 import com.sheinmulti.profile.databinding.ActivityWebviewBinding
 import okhttp3.*
@@ -52,19 +53,9 @@ class WebViewActivity : AppCompatActivity() {
         proxyPassword = intent.getStringExtra("PROXY_PASSWORD")
         proxyType = intent.getStringExtra("PROXY_TYPE") ?: "NONE"
 
-        // CRÍTICO: Establecer data directory suffix ANTES de cualquier WebView
-        // Esto funciona porque WebViewActivity corre en proceso :webview separado
-        // y cada vez que se abre un perfil, el proceso se reinicia fresco
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                WebView.setDataDirectorySuffix(profileSuffix)
-                android.util.Log.d("WebViewActivity", "Data directory suffix set: $profileSuffix")
-            } catch (e: IllegalStateException) {
-                android.util.Log.w("WebViewActivity", "WebView already initialized, cannot change suffix: ${e.message}")
-            } catch (e: Exception) {
-                android.util.Log.e("WebViewActivity", "Error setting data directory suffix: ${e.message}")
-            }
-        }
+        // CRÍTICO: Establecer el suffix ANTES de que MyApplication.onCreate() se ejecute
+        // Esto asegura que cuando el proceso :webview inicie, tenga el suffix correcto
+        MyApplication.intentSuffix = profileSuffix
 
         // Inicializar OkHttp client con proxy si está configurado
         setupProxyClient()
@@ -272,7 +263,7 @@ class WebViewActivity : AppCompatActivity() {
 
     /**
      * Limpia SOLO las cookies y datos de ESTE perfil
-     * Gracias al proceso separado (:webview) y data directory suffix,
+     * Como cada perfil corre en proceso :webview con su propio data directory suffix,
      * esto solo afecta al perfil actual
      */
     private fun clearProfileCookies() {
@@ -280,8 +271,6 @@ class WebViewActivity : AppCompatActivity() {
             .setTitle("Limpiar Cookies")
             .setMessage("¿Eliminar todas las cookies y datos de sesion de este perfil?")
             .setPositiveButton("Limpiar") { _, _ ->
-                // Como cada perfil corre en proceso :webview con su propio data directory suffix,
-                // removeAllCookies() solo afecta las cookies de ESTE perfil
                 CookieManager.getInstance().removeAllCookies { _ ->
                     CookieManager.getInstance().flush()
                     WebStorage.getInstance().deleteAllData()
@@ -303,6 +292,8 @@ class WebViewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // Limpiar el suffix estático para evitar que se reutilice en el próximo perfil
+        MyApplication.intentSuffix = null
         binding.webView.stopLoading()
         binding.webView.loadUrl("about:blank")
         super.onDestroy()
