@@ -91,11 +91,8 @@ class WebViewActivity : AppCompatActivity() {
                 })
             }
 
-<<<<<<< HEAD
-=======
             // For Android 10+, proxy is configured via system properties above
             // WebView will automatically use the system proxy settings
->>>>>>> b20682170b5c89205aa2e8dc496c5dc5a2ad74db
             android.util.Log.d("WebViewActivity", "Proxy configured: $proxyType://$proxyHost:$proxyPort")
         } catch (e: Exception) {
             e.printStackTrace()
