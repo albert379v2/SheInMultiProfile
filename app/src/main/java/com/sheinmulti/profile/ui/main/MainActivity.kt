@@ -62,19 +62,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun openProfile(profile: BrowserProfile) {
         viewModel.activateProfile(profile.id)
-        val intent = Intent(this, WebViewActivity::class.java).apply {
-            putExtra("PROFILE_ID", profile.id)
-            putExtra("PROFILE_NAME", profile.name)
-            putExtra("PROFILE_SUFFIX", profile.dataDirectorySuffix)
-            putExtra("START_URL", profile.startUrl)
-            putExtra("USER_AGENT", profile.userAgent)
-            putExtra("PROXY_HOST", profile.proxyHost)
-            putExtra("PROXY_PORT", profile.proxyPort ?: -1)
-            putExtra("PROXY_USERNAME", profile.proxyUsername)
-            putExtra("PROXY_PASSWORD", profile.proxyPassword)
-            putExtra("PROXY_TYPE", profile.proxyType)
+        try {
+            val intent = Intent(this, WebViewActivity::class.java).apply {
+                putExtra("PROFILE_ID", profile.id)
+                putExtra("PROFILE_NAME", profile.name)
+                putExtra("PROFILE_SUFFIX", profile.dataDirectorySuffix)
+                putExtra("START_URL", profile.startUrl.ifBlank { "https://www.google.com" })
+                putExtra("USER_AGENT", profile.userAgent)
+                putExtra("PROXY_HOST", profile.proxyHost)
+                putExtra("PROXY_PORT", profile.proxyPort ?: -1)
+                putExtra("PROXY_USERNAME", profile.proxyUsername)
+                putExtra("PROXY_PASSWORD", profile.proxyPassword)
+                putExtra("PROXY_TYPE", profile.proxyType)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Error abriendo perfil: ${e.message}", Toast.LENGTH_LONG).show()
+            e.printStackTrace()
         }
-        startActivity(intent)
     }
 
     private fun editProfile(profile: BrowserProfile) {
