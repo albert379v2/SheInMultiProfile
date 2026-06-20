@@ -7,6 +7,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.sheinmulti.profile.MyApplication
 import com.sheinmulti.profile.adapter.ProfileAdapter
 import com.sheinmulti.profile.data.model.BrowserProfile
 import com.sheinmulti.profile.databinding.ActivityMainBinding
@@ -64,11 +65,11 @@ class MainActivity : AppCompatActivity() {
         viewModel.activateProfile(profile.id)
 
         try {
-            val intent = Intent(this, WebViewActivity::class.java).apply {
-                // FLAG_ACTIVITY_CLEAR_TASK asegura que el proceso :webview anterior se limpie
-                // antes de iniciar el nuevo, evitando conflictos de data directory
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            // CRÍTICO: Guardar el suffix en SharedPreferences ANTES de iniciar la Activity
+            // El proceso :webview leerá esto en MyApplication.onCreate()
+            MyApplication.saveProfileSuffix(this, profile.dataDirectorySuffix)
 
+            val intent = Intent(this, WebViewActivity::class.java).apply {
                 putExtra("PROFILE_ID", profile.id)
                 putExtra("PROFILE_NAME", profile.name)
                 putExtra("PROFILE_SUFFIX", profile.dataDirectorySuffix)
