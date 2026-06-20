@@ -86,25 +86,9 @@ class WebViewActivity : AppCompatActivity() {
                 })
             }
 
-            // For Android 10+ use ProxyController
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                try {
-                    val proxyUrl = when (proxyType) {
-                        "HTTP" -> "http://$proxyHost:$proxyPort"
-                        "SOCKS4" -> "socks4://$proxyHost:$proxyPort"
-                        "SOCKS5" -> "socks5://$proxyHost:$proxyPort"
-                        else -> null
-                    }
-                    proxyUrl?.let {
-                        val proxyConfig = android.net.ProxyConfig.Builder()
-                            .addProxyRule(it)
-                            .build()
-                        android.net.Proxy.setHttpProxyConfiguration(proxyConfig)
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
+            // For Android 10+, proxy is configured via system properties above
+            // WebView will automatically use the system proxy settings
+            android.util.Log.d("WebViewActivity", "Proxy configured: $proxyType://$proxyHost:$proxyPort")
         } catch (e: Exception) {
             e.printStackTrace()
             Toast.makeText(this, "Error aplicando proxy: ${e.message}", Toast.LENGTH_SHORT).show()
