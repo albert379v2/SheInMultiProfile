@@ -37,8 +37,15 @@ class WebViewActivity : AppCompatActivity() {
         val proxyPassword = intent.getStringExtra("PROXY_PASSWORD")
         val proxyType = intent.getStringExtra("PROXY_TYPE") ?: "NONE"
 
+        // Try to set data directory suffix per profile (may fail if WebView already initialized)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            WebView.setDataDirectorySuffix(profileSuffix)
+            try {
+                WebView.setDataDirectorySuffix(profileSuffix)
+            } catch (e: IllegalStateException) {
+                android.util.Log.w("WebViewActivity", "WebView already initialized, cannot change suffix: ${e.message}")
+            } catch (e: Exception) {
+                android.util.Log.e("WebViewActivity", "Error setting data directory suffix: ${e.message}")
+            }
         }
 
         applyProxy(proxyHost, proxyPort, proxyUsername, proxyPassword, proxyType)
@@ -61,7 +68,6 @@ class WebViewActivity : AppCompatActivity() {
         if (proxyType == "NONE" || proxyHost.isNullOrBlank() || proxyPort <= 0) return
 
         try {
-            // Set system proxy properties
             val props = Properties(System.getProperties())
             when (proxyType) {
                 "HTTP" -> {
@@ -77,7 +83,6 @@ class WebViewActivity : AppCompatActivity() {
             }
             System.setProperties(props)
 
-            // Set proxy authenticator if credentials provided
             if (!proxyUsername.isNullOrBlank() && !proxyPassword.isNullOrBlank()) {
                 Authenticator.setDefault(object : Authenticator() {
                     override fun getPasswordAuthentication(): PasswordAuthentication? {
@@ -86,8 +91,11 @@ class WebViewActivity : AppCompatActivity() {
                 })
             }
 
+<<<<<<< HEAD
+=======
             // For Android 10+, proxy is configured via system properties above
             // WebView will automatically use the system proxy settings
+>>>>>>> b20682170b5c89205aa2e8dc496c5dc5a2ad74db
             android.util.Log.d("WebViewActivity", "Proxy configured: $proxyType://$proxyHost:$proxyPort")
         } catch (e: Exception) {
             e.printStackTrace()
