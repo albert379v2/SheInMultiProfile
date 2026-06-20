@@ -1,5 +1,6 @@
 package com.sheinmulti.profile.ui.main
 
+import android.app.ActivityManager
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -62,6 +63,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun openProfile(profile: BrowserProfile) {
         viewModel.activateProfile(profile.id)
+
+        // CRÍTICO: Matar el proceso :webview anterior para asegurar aislamiento completo
+        // Esto garantiza que setDataDirectorySuffix() funcione correctamente
+        killWebViewProcess()
+
         try {
             val intent = Intent(this, WebViewActivity::class.java).apply {
                 putExtra("PROFILE_ID", profile.id)
@@ -82,6 +88,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Mata el proceso :webview para forzar reinicio limpio del proceso Chromium
+     * Esto es esencial para que setDataDirectorySuffix() funcione correctamente
+     * y cada perfil tenga cookies/storage completamente aislados
+     */
+    private fun killWebViewProcess() {
+        try {
+            val am = getSystemService(ACTIVITY_SERVICE) as ActivityManager
+            am.runningAppProcesses?.forEach { process ->
+                if (process.processName.endsWith(":webview")) {
+                    android.os.Process.killProcess(process.pid)
+                    android.util.Log.d("MainActivity", "Killed webview process: ${process.pid}")
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Could not kill webview process: ${e.message}")
+        }
+    }
+
     private fun editProfile(profile: BrowserProfile) {
         startActivity(Intent(this, ProfileEditActivity::class.java).apply {
             putExtra("PROFILE_ID", profile.id)
@@ -92,7 +117,11 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Eliminar Perfil")
             .setMessage("¿Eliminar ${profile.name}? Se perderan todas las cookies y sesiones.")
-            .setPositiveButton("Eliminar") { _, _ -> viewModel.deleteProfile(profile) }
+            .setPositiveButton("Eliminar") { _, _ ->
+                // Si el perfil está abierto, matar el proceso webview primero
+                killWebViewProcess()
+                viewModel.deleteProfile(profile)
+            }
             .setNegativeButton("Cancelar", null)
             .show()
     }
